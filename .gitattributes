@@ -1,2 +1,72 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+ORG 0000H
+LJMP MAIN;
+
+ORG 0030H
+MAIN:
+ MOV P1, 0F0H;       令所有行为低电平
+ LCALL D20MS;		延时20ms去抖动
+ MOV A, P1;			读取P1口列值
+ ORL A, #0FH;			将所有行变为高电平
+ CPL A;				然后A取反，取反后仍有高电平就有键按下
+ JZ MAIN;			判断有无键按下，没有时返回重新扫描
+ MOV R0, #00H; 		R0为行计数器
+ MOV R3, #0FEH; 		R3用作行扫描字，移入0FEH扫描第0行
+
+
+QUANSAOMIAO:
+ MOV A, R3;
+ MOV P1, A;			输出行扫描字
+ NOP;
+ NOP;
+ NOP;				3个NOP使P1口输出稳定
+ MOV A, P1;			读列值
+ ORL A, #0FH;			将所有行变为高电平
+ CPL A;				然后A取反，取反后仍有高电平该行就有键按下
+ MOV R2, A;			存列值
+ JNZ SHIBIE;			判断有无键按下，有则跳转到进行列号识别
+ INC R0;				行计数器加1
+ MOV A, R3;			R3的值赋A
+ RL A;				A左移一位
+ MOV R3, A;			A赋给R3，即R3左移一位，准备扫描下一行
+ CJNE R0, #04H, QUANSAOMIAO;   判断是否4行都扫描完了
+LJMP MAIN;
+
+SHIBIE:
+ MOV R1, #00H; 		R1为列计数器
+ MOV A, R2;			将列值移入A中
+S1: 
+ JB ACC.4, YIMA;  		判断该列是否为1，为1则转跳到键值计算
+ RR A;				将列值右移一位，准备判断下一列输入状态
+ INC R1;				列计数器加1
+ CJNE R1, #04H, S1;	判断是否4列都判断完了
+ LJMP MAIN;
+
+YIMA:
+ MOV A, R0;				取行号到A
+ MOV B, #04H;			每行按键个数
+ MUL AB;				行号*按键数
+ ADD A, R1;				行号*按键数+列号=键值
+ MOV R4, A;              键值存入R4
+MOV A, #0FEH;
+ MOV P2, A;				选中第一个数码管
+ MOV DPTR, #T;			将项表T的首地址赋给DPTR
+ MOV A, R4;				键值赋给A做地址偏移量
+ MOVC A, @A+DPTR;   	取出对应键值的数码管段选值
+ MOV P0, A;				输出数码管显示
+ LJMP MAIN;
+
+
+
+T:
+DB 0C0H,0F9H,0A4H,0B0H,99H,92H,82H,0F8H,80H,90H,88H,83H,0C6H,0A1H,86H,8EH;
+ 						存储对应的数码管段选值
+
+D20MS:					延时程序，延时时间为20ms
+ MOV R6, #64H;
+D20MS1:
+ MOV R7, #64H;
+ DJNZ R7, $;
+ DJNZ R6, D20MS1;
+ RET;
+ 
+ END;
