@@ -1,72 +1,52 @@
-ORG 0000H
-LJMP MAIN;
+ORG 0000H       伪指令ORG 指定000H 作为LJMP MAIN的地址，也就是单片机上电后
+CPU取指的初始地址；
+LJMP MAIN		无条件跳转到主程序MAIN；
 
-ORG 0030H
-MAIN:
- MOV P1, 0F0H;       令所有行为低电平
- LCALL D20MS;		延时20ms去抖动
- MOV A, P1;			读取P1口列值
- ORL A, #0FH;			将所有行变为高电平
- CPL A;				然后A取反，取反后仍有高电平就有键按下
- JZ MAIN;			判断有无键按下，没有时返回重新扫描
- MOV R0, #00H; 		R0为行计数器
- MOV R3, #0FEH; 		R3用作行扫描字，移入0FEH扫描第0行
-
-
-QUANSAOMIAO:
- MOV A, R3;
- MOV P1, A;			输出行扫描字
- NOP;
- NOP;
- NOP;				3个NOP使P1口输出稳定
- MOV A, P1;			读列值
- ORL A, #0FH;			将所有行变为高电平
- CPL A;				然后A取反，取反后仍有高电平该行就有键按下
- MOV R2, A;			存列值
- JNZ SHIBIE;			判断有无键按下，有则跳转到进行列号识别
- INC R0;				行计数器加1
- MOV A, R3;			R3的值赋A
- RL A;				A左移一位
- MOV R3, A;			A赋给R3，即R3左移一位，准备扫描下一行
- CJNE R0, #04H, QUANSAOMIAO;   判断是否4行都扫描完了
-LJMP MAIN;
-
-SHIBIE:
- MOV R1, #00H; 		R1为列计数器
- MOV A, R2;			将列值移入A中
-S1: 
- JB ACC.4, YIMA;  		判断该列是否为1，为1则转跳到键值计算
- RR A;				将列值右移一位，准备判断下一列输入状态
- INC R1;				列计数器加1
- CJNE R1, #04H, S1;	判断是否4列都判断完了
- LJMP MAIN;
-
-YIMA:
- MOV A, R0;				取行号到A
- MOV B, #04H;			每行按键个数
- MUL AB;				行号*按键数
- ADD A, R1;				行号*按键数+列号=键值
- MOV R4, A;              键值存入R4
-MOV A, #0FEH;
- MOV P2, A;				选中第一个数码管
- MOV DPTR, #T;			将项表T的首地址赋给DPTR
- MOV A, R4;				键值赋给A做地址偏移量
- MOVC A, @A+DPTR;   	取出对应键值的数码管段选值
- MOV P0, A;				输出数码管显示
- LJMP MAIN;
-
-
-
+ORG 0030H		伪指令ORG指定030H作为主程序的第一个地址，也就是MOV A, #0FEH;的地址；
+MAIN:			主程序MAIN；
+ MOV DPTR, #T;   将项表T第一个数据的地址存入DPTR
+ MOV R1, #00H;   将立即数00H存入R1，起赋初值和重置R1的作用
+L:
+ LCALL DELAY;		调用DELAY程序
+ MOV A, R1;		R1的数据存入A中
+ ADD A, #04H;		A的数据和立即数04H相加存入A中
+ MOV R1, A;		A的数据存入R1中
+ CJNE A, #10H, L;	判断A的内容是否与10H相等，不相等就跳转到L，相等就顺序向下执行
+ LJMP MAIN;		跳转到MAIN程序
+ 
+ 
+DELAY:
+ MOV R3, #0FFH;	立即数0FFH存入R3中
+L1:
+ MOV R4, R1;		R1的数据存入到R4中，起赋初值和重置R4的作用
+ MOV R5, #00H;	立即数00H存入R5中，起赋初值和重置R5的作用
+ MOV R0, #7FH;	立即数7FH存入R0中，起赋初值和重置R0的作用
+L2:
+ MOV A, R0;		R0的数据存入A中
+ RL A;			将A中的数据左移一位
+ MOV R0, A;		将左移后的数据存回R0
+ MOV P2, A;		将A的数据输出P2，进行数码管位选
+ MOV A, R4;		将R4的数据存入A，用R4中的数据作为DPTR的偏移量
+ MOVC A, @A+DPTR;   A+DPTR的值作为地址，将该地址指向的数据赋给A，即将T项表的数据赋给A；
+ MOV P0, A;     将A的内容赋给P0，即将T项表的数据赋给A，使数码管显示对应的数字；
+ INC R4;			将R4的内容+1后，赋给R4
+ INC R5;			将R5的内容+1后，赋给R5
+ LCALL D3MS;		调用延时程序D3MS，延时3ms
+ CJNE R5, #04H, L2;  判断R5的内容是否与04H相等，不相等就跳转到L2，相等就顺序向下执行
+ DJNZ R3, L1;		条件转移指令，若R3-1≠0，则跳转到L1，否则执行下一条指令
+ RET;	返回指令RET，指返回到刚才调用DELAY的指令的下一条指令，占2个机器周期
 T:
 DB 0C0H,0F9H,0A4H,0B0H,99H,92H,82H,0F8H,80H,90H,88H,83H,0C6H,0A1H,86H,8EH;
- 						存储对应的数码管段选值
+				创建项表，存储数码管0~F的段编码；
 
-D20MS:					延时程序，延时时间为20ms
- MOV R6, #64H;
-D20MS1:
- MOV R7, #64H;
- DJNZ R7, $;
- DJNZ R6, D20MS1;
- RET;
+DD3MS:
+ MOV R6, #19H;		将立即数19H赋值给R6
+D3MS1:
+ MOV R7, #14H;		将立即数14H赋值给R7
+DJNZ R7, $;			条件转移指令，若R7-1≠0，则原地跳转，否则执行下一条指令;因为
+R7初始值为14H，每执行一次DJNZ R7,$需要2个机器周期，所以这个循环结束后需要2*14H*T(T为机器周期)
+DJNZ R6, D3MS1;		条件转移指令，若R6-1≠0，则跳转到D3MS1，否则执行下一条指令;因为R6初始值为19H，每执行一次本指令需要2个机器周期。所以这个循环结束后需要19H*（2*14H+2）T≈1000T
+
+ RET;	返回指令RET，指返回到刚才调用DELAY的指令的下一条指令，占2个机器周期；
  
- END;
+ END	结束指令END（伪指令不占地址），告诉汇编软件本源程序到此结束。也就是在编译的时候，只编译END以上的程序；每个程序只有一个END;
